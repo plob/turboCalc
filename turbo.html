@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<title>Turbo Calculator</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#273449; --fg:#e2e8f0; --muted:#94a3b8;
+    --accent:#38bdf8; --good:#34d399; --bad:#f87171; --line:#334155;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemSystem,"Segoe UI",Roboto,sans-serif;
+    font-size:16px;line-height:1.4}
+  .wrap{max-width:520px;margin:0 auto;padding:14px 14px 80px}
+  h1{font-size:20px;margin:6px 0 2px;text-align:center}
+  .sub{text-align:center;color:var(--muted);font-size:12px;margin:0 0 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:14px;margin-bottom:14px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+    margin:0 0 10px;font-weight:600}
+  label{display:block;font-size:13px;color:var(--muted);margin:8px 0 3px}
+  input,select{width:100%;padding:12px;font-size:17px;border:1px solid var(--line);
+    border-radius:10px;background:var(--card2);color:var(--fg)}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;gap:10px} .row>*{flex:1}
+  .seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{flex:1;padding:12px;border:none;background:transparent;color:var(--muted);
+    font-size:15px;font-weight:600;cursor:pointer}
+  .seg button.active{background:var(--accent);color:#04263a}
+  button.act{width:100%;padding:13px;font-size:16px;font-weight:600;border:none;
+    border-radius:10px;background:var(--accent);color:#04263a;cursor:pointer;margin-top:6px}
+  button.act:active{opacity:.85}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
+  .val{display:flex;justify-content:space-between;align-items:baseline;
+    padding:6px 0;border-bottom:1px solid var(--line);gap:8px}
+  .val:last-child{border-bottom:none}
+  .val .k{color:var(--muted);font-size:13px}
+  .val .v{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+  .good{color:var(--good)} .bad{color:var(--bad)}
+  .net{font-size:20px}
+  .saved-item{background:var(--card2);border:1px solid var(--line);border-radius:10px;
+    padding:10px;margin-bottom:8px}
+  .saved-item .top{display:flex;justify-content:space-between;align-items:start;gap:8px}
+  .saved-item .title{font-weight:600;font-size:14px}
+  .saved-item .meta{color:var(--muted);font-size:12px;margin-top:2px}
+  .saved-item .pl{font-weight:600;font-size:14px;text-align:right}
+  .saved-item .acts{display:flex;gap:8px;margin-top:8px}
+  .saved-item .acts button{flex:1;padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--line);
+    background:transparent;color:var(--fg);cursor:pointer}
+  .note{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:6px;background:var(--line);color:var(--fg)}
+  .tag.long{background:#065f46;color:#d1fae5} .tag.short{background:#7f1d1d;color:#fee2e2}
+  .err{color:var(--bad);font-size:12px;margin-top:6px;min-height:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Turbo Calculator</h1>
+  <p class="sub">Long / Short turbos · value, gap & target</p>
+
+  <!-- LOAD -->
+  <div class="card">
+    <h2>Load from WKN / ISIN</h2>
+    <div class="row">
+      <div style="flex:2"><label>WKN / ISIN</label>
+        <input id="wkn" placeholder="e.g. DB0USR" inputmode="numeric"></div>
+      <div style="flex:1"><label>&nbsp;</label>
+        <button class="act" id="loadBtn">Load</button></div>
+    </div>
+    <div id="name" class="note" style="margin-top:10px"></div>
+    <div class="err" id="loadErr"></div>
+    <div class="note">Fetches strike, ratio, currency & current price. Works over http/https;
+      may be unavailable from a local file. Manual entry below always works.</div>
+  </div>
+
+  <!-- POSITION -->
+  <div class="card">
+    <h2>Position</h2>
+    <label>Type</label>
+    <div class="seg" id="typeSeg">
+      <button data-v="long" class="active">LONG ↑</button>
+      <button data-v="short">SHORT ↓</button>
+    </div>
+    <div class="row">
+      <div><label>Conversion ratio</label><input id="ratio" type="number" step="any" value="1"></div>
+      <div><label>Strike</label><input id="strike" type="number" step="any" value="0"></div>
+    </div>
+    <label>Current underlying price <span class="tag" id="underlyingTag">Basiswert</span></label>
+    <input id="underlying" type="number" step="any" value="0">
+    <label>Market / last price of the turbo <span class="note" style="margin:0">(what you can sell at now)</span></label>
+    <input id="market" type="number" step="any" placeholder="filled by load, or type it" value="">
+    <div class="row">
+      <div><label>Entry price <span class="note" style="margin:0">(optional)</span></label><input id="entry" type="number" step="any" value="0"></div>
+      <div><label>Pieces</label><input id="pieces" type="number" step="1" value="0"></div>
+    </div>
+    <label>Target underlying price <span class="note" style="margin:0">(for projection)</span></label>
+    <input id="target" type="number" step="any" placeholder="same as current if empty">
+    <div class="row" style="margin-top:10px">
+      <div><label>Currency</label>
+        <select id="currency"><option>EUR</option><option>USD</option><option>GBP</option><option>other</option></select></div>
+      <div style="display:flex;align-items:flex-end">
+        <button class="act" id="saveBtn" style="margin:0">Save position</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VALUES -->
+  <div class="card">
+    <h2>Values</h2>
+    <div class="val"><span class="k">Theoretical (intrinsic) / piece</span><span class="v" id="v_theoretical">—</span></div>
+    <div class="val"><span class="k">Theoretical total (<span id="lbl_pieces">0</span> pcs)</span><span class="v" id="v_theoTotal">—</span></div>
+    <div class="val"><span class="k">Market price / piece</span><span class="v" id="v_market">—</span></div>
+    <div class="val"><span class="k">Market total</span><span class="v" id="v_marketTotal">—</span></div>
+    <div class="val"><span class="k">Gap: market vs theoretical</span><span class="v" id="v_gap">—</span></div>
+    <div class="val"><span class="k">Status</span><span class="v" id="v_status">—</span></div>
+  </div>
+
+  <!-- MONEY -->
+  <div class="card">
+    <h2>Money in / out</h2>
+    <div class="val"><span class="k">Money in (your cost)</span><span class="v" id="m_in">—</span></div>
+    <div class="val"><span class="k">Money out (current value)</span><span class="v" id="m_out">—</span></div>
+    <div class="val"><span class="k">Net now</span><span class="v net" id="m_net">—</span></div>
+  </div>
+
+  <!-- PROJECTION -->
+  <div class="card">
+    <h2>Projection at target</h2>
+    <div class="val"><span class="k">If underlying → <span id="projTarget">—</span></span><span class="v" id="proj_price">—</span></div>
+    <div class="val"><span class="k">Projected value</span><span class="v" id="proj_value">—</span></div>
+    <div class="val"><span class="k">Projected net</span><span class="v net" id="proj_net">—</span></div>
+  </div>
+
+  <!-- SAVED -->
+  <div class="card">
+    <h2>Saved positions</h2>
+    <div id="savedList"><div class="note">Nothing saved yet.</div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var STORE_KEY = "turboCalculator.v1";
+  var $ = function(id){return document.getElementById(id);};
+
+  // ---- helpers ----
+  function num(id, def){
+    var v = parseFloat($(id).value);
+    return isNaN(v) ? def : v;
+  }
+  function setVal(id, v){ $(id).value = (v==null || v==="") ? "" : v; }
+  var price = function(n){ return isFinite(n) ? n.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:4}) : "—"; };
+  var money = function(n){ return isFinite(n) ? n.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}) : "—"; };
+  var pct = function(n){ return isFinite(n) ? (n>=0?"+":"") + n.toFixed(2) + "%" : "—"; };
+
+  var state = { type: "long", editingId: null };
+
+  // ---- type segment ----
+  $("typeSeg").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-v]");
+    if(!b) return;
+    state.type = b.dataset.v;
+    [].forEach.call(b.parentNode.children, function(c){ c.classList.toggle("active", c===b); });
+    compute();
+  });
+
+  // ---- api load ----
+  function deepValue(v){
+    if(v==null) return null;
+    if(typeof v === "object" && !Array.isArray(v) && "value" in v) v = v.value;
+    if(v==null || v==="") return null;
+    var n = parseFloat(String(v).trim().replace(/,/g,""));
+    return isNaN(n) ? null : n;
+  }
+  function g(j, names){ for(var i=0;i<names.length;i++){ var v=deepValue(j[names[i]]); if(v!=null) return v; } return null; }
+
+  function loadWkn(){
+    var wkn = $("wkn").value.trim();
+    $("loadErr").textContent = "";
+    if(!wkn){ $("loadErr").textContent = "Enter a WKN or ISIN."; return; }
+    $("loadBtn").disabled = true; $("loadBtn").textContent = "…";
+    var base = "https://api.baaderbank.de/quote/get?wkn=" + encodeURIComponent(wkn) + "&type=tpa_certificate";
+    var attempts = [
+      base,
+      "https://api.allorigins.win/raw?url=" + encodeURIComponent(base),
+      "https://corsproxy.io/?url=" + encodeURIComponent(base)
+    ];
+    var done = function(err){ $("loadBtn").disabled=false; $("loadBtn").textContent="Load"; if(err) throw err; };
+
+    fetch(attempts[0],{cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw new Error("http "+r.status); return r.json(); })
+      .then(function(j){ applyApi(j, wkn); done(); })
+      .catch(function(e1){
+        fetch(attempts[1],{cache:"no-store"})
+          .then(function(r){ if(!r.ok) throw new Error("http "+r.status); return r.json(); })
+          .then(function(j){ applyApi(j, wkn); done(); })
+          .catch(function(e2){
+            fetch(attempts[2],{cache:"no-store"})
+              .then(function(r){ if(!r.ok) throw new Error("http "+r.status); return r.json(); })
+              .then(function(j){ applyApi(j, wkn); done(); })
+              .catch(function(e3){
+                $("loadBtn").textContent="Load";
+                $("loadErr").textContent = "Live data unavailable — enter values manually. ("+e2.message+")";
+              });
+          });
+      });
+  }
+
+  function applyApi(j, wkn){
+    var name = g(j,["name","title"]);
+    $("name").innerHTML = name
+      ? (name + ' <span class="tag">' + (g(j,["wkn"])||"") + "</span>" + (g(j,["isin"])?' <span class="tag">'+g(j,["isin"])+"</span>":""))
+      : "";
+    var type = "long";
+    // Some turbos are put-style; if strike < underlying it is a call/long, else put/short.
+    var strike = g(j,["strike_price","strike"]);
+    var underlyingNow = g(j,["underlying","calculation_price","basiswert"]);
+    if(strike!=null && underlyingNow!=null && underlyingNow < strike) type = "short";
+    if(type !== state.type){
+      state.type = type;
+      [].forEach.call($("typeSeg").children, function(b){ b.classList.toggle("active", b.dataset.v===type); });
+    }
+    $("wkn").value = g(j,["wkn"])||wkn;
+    setVal("strike", strike);
+    setVal("ratio", g(j,["conversion_ratio","conversionratio","conversion_factor","conversionfactor","leverage_factor"]) || 1);
+    setVal("underlying", underlyingNow);
+    setVal("market", g(j,["last","marketprice","ask"]) );
+    var cur = g(j,["currency","cur"]);
+    if(cur){ var o=$("currency").options; for(var i=0;i<o.length;i++){ if(o[i].value.toUpperCase()===String(cur).toUpperCase()){ o.selectedIndex=i; break; } } }
+    compute();
+  }
+
+  $("loadBtn").addEventListener("click", loadWkn);
+
+  // ---- core math ----
+  function intrinsicPerPiece(){
+    var underlying = num("underlying", 0);
+    var strike = num("strike", 0);
+    var ratio = num("ratio", 0);
+    if(ratio<=0 || strike<0) return null;
+    return state.type === "long"
+      ? Math.max(underlying - strike, 0) * ratio
+      : Math.max(strike - underlying, 0) * ratio;
+  }
+
+  function compute(){
+    var ratio = num("ratio", 0);
+    var pieces = num("pieces", 0);
+    var entry = num("entry", 0);
+    var market = $("market").value === "" ? NaN : num("market", 0);
+    var underlying = num("underlying", 0);
+
+    $("lbl_pieces").textContent = pieces;
+
+    // Values
+    var theo = intrinsicPerPiece();
+    $("v_theoretical").textContent = theo==null ? "—" : price(theo);
+
+    var theoTotal = (theo!=null) ? theo * pieces : null;
+    $("v_theoTotal").textContent = theoTotal==null ? "—" : money(theoTotal);
+
+    var hasMarket = isFinite(market) && market > 0;
+    $("v_market").textContent = hasMarket ? price(market) : "—";
+    $("v_marketTotal").textContent = hasMarket ? money(market*pieces) : "—";
+
+    // Gap (market vs theoretical), per piece
+    var gap = null;
+    if(theo!=null && hasMarket) gap = market - theo;
+    var gapEl = $("v_gap");
+    if(gap==null){ gapEl.textContent = "—"; gapEl.className = "v"; }
+    else {
+      gapEl.textContent = (gap>=0?"+":"") + price(gap) + " (" + pct(gap/theo*100) + ")";
+      gapEl.className = "v " + (gap>=0 ? "good" : "bad");
+    }
+
+    // Status
+    var statusEl = $("v_status");
+    if(theo==null){ statusEl.textContent = "enter ratio + strike"; statusEl.className="v"; }
+    else if(underlying <= 0){ statusEl.textContent = "enter underlying"; statusEl.className="v"; }
+    else {
+      if(state.type==="long" && underlying <= strike) { statusEl.textContent = "OUT OF MONEY / KICKED"; statusEl.className="v bad"; }
+      else if(state.type==="short" && underlying >= strike) { statusEl.textContent = "OUT OF MONEY / KICKED"; statusEl.className="v bad"; }
+      else { statusEl.textContent = "IN THE MONEY"; statusEl.className="v good"; }
+    }
+
+    // Money in / out (use market price as sell value if available; else theoretical)
+    var sellNow = hasMarket ? market : theo;
+    var costIn = entry * pieces;
+    var outNow = (sellNow!=null) ? sellNow * pieces : null;
+    $("m_in").textContent = costIn>0 ? money(costIn) : "—";
+    $("m_out").textContent = outNow!=null ? money(outNow) : "—";
+    var net = (outNow!=null && costIn>0) ? outNow - costIn : null;
+    var netEl = $("m_net");
+    if(net==null){ netEl.textContent="—"; netEl.className="v net"; }
+    else {
+      var ret = costIn>0 ? net/costIn*100 : NaN;
+      netEl.textContent = (net>=0?"+":"") + money(net) + " (" + pct(ret) + ")";
+      netEl.className = "v net " + (net>=0?"good":"bad");
+    }
+
+    // Projection at target underlying
+    var targetRaw = $("target").value;
+    var projTargetEl = $("projTarget");
+    var projPrice = $("proj_price"), projValue=$("proj_value"), projNet=$("proj_net");
+    if(targetRaw === ""){
+      projTargetEl.textContent = underlying + " (current)";
+    } else {
+      projTargetEl.textContent = targetRaw;
+    }
+    var targetVal = targetRaw === "" ? underlying : num("target", 0);
+    var theoAtTarget = (ratio>0 && targetVal>0)
+      ? (state.type==="long" ? Math.max(targetVal - strike,0) : Math.max(strike - targetVal,0)) * ratio
+      : null;
+    projPrice.textContent = theoAtTarget!=null ? price(theoAtTarget) : "—";
+    var valAtTarget = (theoAtTarget!=null) ? theoAtTarget * pieces : null;
+    projValue.textContent = valAtTarget!=null ? money(valAtTarget) : "—";
+    var netAtTarget = (valAtTarget!=null && costIn>0) ? valAtTarget - costIn : null;
+    if(netAtTarget==null){ projNet.textContent="—"; projNet.className="v net"; }
+    else {
+      var retT = costIn>0 ? netAtTarget/costIn*100 : NaN;
+      projNet.textContent = (netAtTarget>=0?"+":"") + money(netAtTarget) + " (" + pct(retT) + ")";
+      projNet.className = "v net " + (netAtTarget>=0?"good":"bad");
+    }
+  }
+
+  // recompute on any input change
+  ["ratio","strike","underlying","market","entry","pieces","target","currency"].forEach(function(id){
+    $(id).addEventListener("input", compute);
+    $(id).addEventListener("change", compute);
+  });
+
+  // ---- save / load ----
+  var saved = [];
+  try{ saved = JSON.parse(localStorage.getItem(STORE_KEY)) || []; }catch(e){ saved = []; }
+  var SAVED_ID = 1;
+
+  function snapshot(){
+    return {
+      id: state.editingId || (Date.now()),
+      ts: new Date().toLocaleString(),
+      wkn: $("wkn").value.trim(),
+      name: $("name").textContent.trim(),
+      type: state.type,
+      ratio: $("ratio").value, strike: $("strike").value,
+      underlying: $("underlying").value, market: $("market").value,
+      entry: $("entry").value, pieces: $("pieces").value,
+      target: $("target").value, currency: $("currency").value
+    };
+  }
+
+  $("saveBtn").addEventListener("click", function(){
+    var s = snapshot();
+    if(state.editingId){
+      var idx = saved.findIndex(function(x){ return x.id === s.id; });
+      if(idx>=0) saved[idx] = s; else saved.push(s);
+    } else saved.push(s);
+    state.editingId = null;
+    persist(); render();
+  });
+
+  function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(saved)); }catch(e){} }
+
+  function render(){
+    var box = $("savedList");
+    if(!saved.length){ box.innerHTML = '<div class="note">Nothing saved yet.</div>'; return; }
+    box.innerHTML = saved.map(function(s){
+      // compute a quick P&L preview using its own numbers
+      var ratio = parseFloat(s.ratio)||0, strike = parseFloat(s.strike)||0,
+          und = parseFloat(s.underlying)||0, pieces = parseFloat(s.pieces)||0,
+          entry = parseFloat(s.entry)||0, market = s.market==="" ? NaN : parseFloat(s.market)||0;
+      var theo = ratio>0 ? (s.type==="long"?Math.max(und-strike,0):Math.max(strike-und,0))*ratio : null;
+      var sell = isFinite(market)&&market>0 ? market : theo;
+      var out = (sell!=null)?sell*pieces:null, cost = entry*pieces, net = (out!=null&&cost>0)?out-cost:null;
+      var cls = s.type==="long"?"tag long":"tag short";
+      var netHtml = net==null ? '<div class="meta">—</div>'
+        : '<div class="pl '+(net>=0?"good":"bad")+'">'+(net>=0?"+":"")+money(net)+'</div>';
+      return '<div class="saved-item">' +
+        '<div class="top"><div><div class="title">'+(s.name||s.wkn||"(untitled)")+'</div>' +
+        '<div class="meta"><span class="'+cls+'">'+s.type.toUpperCase()+'</span> ratio '+s.ratio+
+        ' · strike '+s.strike+' · under '+s.underlying+' · '+s.pieces+' pcs</div></div>'+netHtml+'</div>' +
+        '<div class="acts"><button data-act="load">Open</button><button data-act="del">Delete</button></div>' +
+        '</div>';
+    }).join("");
+
+    box.querySelectorAll(".saved-item").forEach(function(el, i){
+      var s = saved[i];
+      el.querySelector('[data-act="load"]').addEventListener("click", function(){ open(s); });
+      el.querySelector('[data-act="del"]').addEventListener("click", function(){
+        if(confirm("Delete this saved position?")){ saved = saved.filter(function(x){ return x.id!==s.id; }); persist(); render(); }
+      });
+    });
+  }
+
+  function open(s){
+    state.editingId = s.id;
+    $("wkn").value = s.wkn||"";
+    $("name").textContent = s.name||"";
+    state.type = s.type;
+    [].forEach.call($("typeSeg").children, function(b){ b.classList.toggle("active", b.dataset.v===s.type); });
+    setVal("ratio", s.ratio); setVal("strike", s.strike);
+    setVal("underlying", s.underlying); setVal("market", s.market||"");
+    setVal("entry", s.entry); setVal("pieces", s.pieces);
+    setVal("target", s.target);
+    var o=$("currency").options; for(var i=0;i<o.length;i++){ if(o[i].value.toUpperCase()===String(s.currency||"EUR").toUpperCase()){ o.selectedIndex=i; break; } }
+    $("saveBtn").textContent = "Save changes";
+    window.scrollTo({top:0,behavior:"smooth"});
+    compute();
+  }
+
+  render();
+  compute();
+})();
+</script>
+</body>
+</html>
